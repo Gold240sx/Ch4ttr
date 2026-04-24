@@ -16,10 +16,10 @@ final class CleanupService {
         if trimmed.isEmpty { return "" }
 
         var result = normalizeSpacing(trimmed)
-        result = collapseAdjacentSpeechRepeats(result)
+        result = applySpeechRepeatCollapse(result)
         result = applyDictionary(result, entries: dictionary)
         result = normalizeSpacing(result)
-        result = collapseAdjacentSpeechRepeats(result)
+        result = applySpeechRepeatCollapse(result)
 
         if language != .hebrew {
             result = capitalizeSentences(result)
@@ -33,13 +33,13 @@ final class CleanupService {
         if trimmed.isEmpty { return "" }
 
         var result = normalizeSpacing(trimmed)
-        result = collapseAdjacentSpeechRepeats(result)
+        result = applySpeechRepeatCollapse(result)
 
         // Local per-user dictionary: phrase replacements (case-insensitive).
         // This is intentionally deterministic and fully offline.
         result = applyDictionary(result, entries: dictionary)
         result = normalizeSpacing(result)
-        result = collapseAdjacentSpeechRepeats(result)
+        result = applySpeechRepeatCollapse(result)
 
         // Capitalization rules are language-dependent; Hebrew has no casing.
         if language != .hebrew {
@@ -85,6 +85,77 @@ final class CleanupService {
         out = applyRegex("\\s+", to: out, replacement: " ")
 
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Short-phrase collapse then long-span collapse (streaming dictation often repeats whole clauses).
+    private func applySpeechRepeatCollapse(_ s: String) -> String {
+        let pass1 = collapseAdjacentSpeechRepeats(s)
+        return collapseRepeatedConsecutiveWordSpans(pass1)
+    }
+
+    /// Removes an immediately following duplicate of the same word run (length ≥ `minSpanWords`), using the same word normalization as short-phrase collapse.
+    private func collapseRepeatedConsecutiveWordSpans(_ s: String) -> String {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = trimmed.split(separator: " ").map(String.init)
+        let minSpanWords = 6
+        let maxSpanWords = 100
+        guard words.count >= minSpanWords * 2 else { return s }
+
+        var w = words
+        var safety = 0
+        while safety < 80 {
+            safety += 1
+            var removed = false
+            outer: for i in 0..<w.count {
+                let upperSpan = min(maxSpanWords, (w.count - i) / 2)
+                if upperSpan < minSpanWords { break }
+                for span in stride(from: upperSpan, through: minSpanWords, by: -1) {
+                    guard i + 2 * span <= w.count else { continue }
+                    let a = w[i..<(i + span)]
+                    let b = w[(i + span)..<(i + 2 * span)]
+                    if wordSpansMatchForLongRunDeduplication(a, b, span: span) {
+                        w.removeSubrange((i + span)..<(i + 2 * span))
+                        removed = true
+                        break outer
+                    }
+                }
+            }
+            if !removed { break }
+        }
+
+        return normalizeSpacing(w.joined(separator: " "))
+    }
+
+    private func wordSpansMatchForLongRunDeduplication(_ a: ArraySlice<String>, _ b: ArraySlice<String>, span: Int) -> Bool {
+        guard a.count == b.count, a.count == span, !a.isEmpty else { return false }
+        var mismatchPairs: [(String, String)] = []
+        for (x, y) in zip(a, b) {
+            let nx = comparableWordForRepeatCollapse(x)
+            let ny = comparableWordForRepeatCollapse(y)
+            if nx != ny {
+                mismatchPairs.append((nx, ny))
+            }
+        }
+        if mismatchPairs.isEmpty { return true }
+        guard span >= 10, mismatchPairs.count == 1 else { return false }
+        let (nl, nr) = mismatchPairs[0]
+        if nl.isEmpty, nr.isEmpty { return true }
+        let maxLen = max(nl.count, nr.count)
+        let distance = levenshteinDistance(nl, nr)
+        return distance <= min(4, max(2, maxLen / 3))
+    }
+
+    private func comparableWordForRepeatCollapse(_ w: String) -> String {
+        var t = w
+        while let last = t.last {
+            switch last {
+            case ".", ",", "!", "?", ";", ":", "\"", "'", "”", "“", "’":
+                t.removeLast()
+            default:
+                return normalizedWord(t)
+            }
+        }
+        return normalizedWord(t)
     }
 
     private func collapseAdjacentSpeechRepeats(_ s: String) -> String {

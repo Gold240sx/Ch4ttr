@@ -130,4 +130,21 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertFalse(polished.contains("There's plenty of. There's plenty"))
         XCTAssertTrue(polished.localizedCaseInsensitiveContains("plenty of space"))
     }
+
+    func testCollapsesTripleLongDuplicateClause() {
+        let phrase = "So I'm interested in building an app to replace whisper to be able to provide live voice transcription"
+        let joined = "\(phrase) \(phrase) \(phrase)"
+        let cleaned = CleanupService().cleanupText(joined, language: .english, dictionary: [])
+        XCTAssertFalse(cleaned.contains("\(phrase) \(phrase)"))
+        XCTAssertTrue(cleaned.localizedCaseInsensitiveContains("replace whisper"))
+    }
+
+    func testCollapsesLongRunsWithSingleWordNearMiss() {
+        let a = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo"
+        let b = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilos"
+        let joined = "\(a) \(b) \(a)"
+        let polished = CleanupService().postProcessJoinedLiveDisplay(joined, language: .english, dictionary: [])
+        XCTAssertFalse(polished.contains("\(a) \(b)"))
+        XCTAssertTrue(polished.localizedCaseInsensitiveContains("juliet"))
+    }
 }

@@ -14,7 +14,7 @@ Think of it as a small, hackable alternative to “big” dictation stacks: Swif
 - **Cloud when you want:** **OpenAI** or **Groq** transcription for users who already use those APIs.
 - **Actually pastes:** Uses the pasteboard + accessibility-aware text replacement so transcripts land where you are typing (requires **Accessibility** permission).
 - **Flexible triggers:** Global **hotkey** (toggle or push-to-talk) plus optional **long-hold modifier** (e.g. hold **Shift alone** for ~2 seconds).
-- **Quality-of-life cleanup:** Normalizes spacing, collapses obvious **repeated phrases** from streaming recognition, per-user **dictionary** replacements, and sentence capitalization (where applicable).
+- **Quality-of-life cleanup:** Normalizes spacing, collapses **short repeated phrases** and **long consecutive duplicate clauses** (common when streaming recognition stutters), per-user **dictionary** replacements, and sentence capitalization (where applicable).
 - **Voice commands:** Spoken commands to restart / trim paragraph / stop recording (see `VoiceCommandService` in the codebase).
 - **Mini recorder:** Compact floating panel with level meter, optional live preview, and quick engine/mic toggles.
 - **Profiles:** Local per-user settings and dictionary (no account server in-app).
