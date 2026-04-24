@@ -26,4 +26,15 @@ final class LiveTranscriptOverlapTests: XCTestCase {
         XCTAssertEqual(split.head, previous)
         XCTAssertEqual(split.tail, next)
     }
+
+    func testFuzzySuffixPrefixOverlapStillDetectsSharedClause() {
+        let tail = "one two three four fiev six"
+        let exactTail = "one two three four five six"
+        let previous = "prefix words " + exactTail
+        let next = tail + " seven eight"
+        XCTAssertGreaterThanOrEqual(
+            LiveTranscriptOverlap.longestSuffixPrefixOverlapWordCount(previous: previous, next: next),
+            6
+        )
+    }
 }

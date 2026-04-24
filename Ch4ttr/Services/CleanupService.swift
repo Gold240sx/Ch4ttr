@@ -97,7 +97,7 @@ final class CleanupService {
     private func collapseRepeatedConsecutiveWordSpans(_ s: String) -> String {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = trimmed.split(separator: " ").map(String.init)
-        let minSpanWords = 6
+        let minSpanWords = 5
         let maxSpanWords = 100
         guard words.count >= minSpanWords * 2 else { return s }
 
@@ -118,6 +118,17 @@ final class CleanupService {
                         removed = true
                         break outer
                     }
+                    // Rewritten clause: same rough length, several words differ (dictation “remakes”).
+                    for delta in [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8] {
+                        let span2 = span + delta
+                        guard span2 >= minSpanWords, i + span + span2 <= w.count else { continue }
+                        let b2 = w[(i + span)..<(i + span + span2)]
+                        if wordSpansRoughlyEqualUnequalRuns(Array(a), Array(b2)) {
+                            w.removeSubrange((i + span)..<(i + span + span2))
+                            removed = true
+                            break outer
+                        }
+                    }
                 }
             }
             if !removed { break }
@@ -126,23 +137,51 @@ final class CleanupService {
         return normalizeSpacing(w.joined(separator: " "))
     }
 
+    /// Equal-length runs: allow several fuzzy word pairs when the span is long (streaming rewrites).
     private func wordSpansMatchForLongRunDeduplication(_ a: ArraySlice<String>, _ b: ArraySlice<String>, span: Int) -> Bool {
         guard a.count == b.count, a.count == span, !a.isEmpty else { return false }
-        var mismatchPairs: [(String, String)] = []
+        var mismatches = 0
         for (x, y) in zip(a, b) {
-            let nx = comparableWordForRepeatCollapse(x)
-            let ny = comparableWordForRepeatCollapse(y)
-            if nx != ny {
-                mismatchPairs.append((nx, ny))
+            if !wordsRoughlyEqualPairForStreaming(x, y) {
+                mismatches += 1
             }
         }
-        if mismatchPairs.isEmpty { return true }
-        guard span >= 10, mismatchPairs.count == 1 else { return false }
-        let (nl, nr) = mismatchPairs[0]
-        if nl.isEmpty, nr.isEmpty { return true }
-        let maxLen = max(nl.count, nr.count)
-        let distance = levenshteinDistance(nl, nr)
-        return distance <= min(4, max(2, maxLen / 3))
+        let allowed = maxFuzzyWordMismatches(forEqualSpan: span)
+        return mismatches <= allowed
+    }
+
+    private func maxFuzzyWordMismatches(forEqualSpan span: Int) -> Int {
+        switch span {
+        case ..<8: return 0
+        case 8..<12: return 1
+        case 12..<18: return 2
+        default: return min(6, span / 4)
+        }
+    }
+
+    /// Consecutive runs of similar length where most aligned words match fuzzily (Apple rephrases mid-clause).
+    private func wordSpansRoughlyEqualUnequalRuns(_ a: [String], _ b: [String]) -> Bool {
+        let n = min(a.count, b.count)
+        let diff = abs(a.count - b.count)
+        guard n >= 8, diff <= max(6, n / 4) else { return false }
+        var ok = 0
+        for i in 0..<n {
+            if wordsRoughlyEqualPairForStreaming(a[i], b[i]) {
+                ok += 1
+            }
+        }
+        return Double(ok) / Double(n) >= 0.80
+    }
+
+    private func wordsRoughlyEqualPairForStreaming(_ x: String, _ y: String) -> Bool {
+        let nx = comparableWordForRepeatCollapse(x)
+        let ny = comparableWordForRepeatCollapse(y)
+        if nx == ny { return true }
+        let maxLen = max(nx.count, ny.count)
+        if maxLen == 0 { return true }
+        if abs(nx.count - ny.count) > max(3, maxLen / 2) { return false }
+        let d = levenshteinDistance(nx, ny)
+        return d <= min(5, max(2, maxLen / 2 + 1))
     }
 
     private func comparableWordForRepeatCollapse(_ w: String) -> String {

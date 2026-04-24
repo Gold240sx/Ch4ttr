@@ -147,4 +147,23 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertFalse(polished.contains("\(a) \(b)"))
         XCTAssertTrue(polished.localizedCaseInsensitiveContains("juliet"))
     }
+
+    func testCollapsesNearDuplicateClauseWithExtraTailWords() {
+        let core = "If I had play then I can basically have it type and write whatever I am trying to have transcribed"
+        let longer = "\(core) again there is hot keys and secondary passes"
+        let joined = "\(core) \(longer)"
+        let polished = CleanupService().postProcessJoinedLiveDisplay(joined, language: .english, dictionary: [])
+        let wcJoined = joined.split { $0.isWhitespace }.count
+        let wcPolished = polished.split { $0.isWhitespace }.count
+        XCTAssertLessThan(wcPolished, wcJoined - 6, "Should drop most of the repeated clause, not stack both.")
+        XCTAssertTrue(polished.localizedCaseInsensitiveContains("transcribed"))
+    }
+
+    func testCollapsesEqualLengthClauseWithSeveralSmallWordRewrites() {
+        let a = "one two three four five six seven eight nine ten eleven twelve"
+        let b = "one two three four fiev six seven eight nine ten eleven twelve"
+        let joined = "\(a) \(b)"
+        let polished = CleanupService().postProcessJoinedLiveDisplay(joined, language: .english, dictionary: [])
+        XCTAssertFalse(polished.lowercased().contains("five") && polished.lowercased().contains("fiev"))
+    }
 }

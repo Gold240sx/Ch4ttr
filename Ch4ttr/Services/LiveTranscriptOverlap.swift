@@ -14,9 +14,63 @@ enum LiveTranscriptOverlap {
         s.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
-    private static func wordRunsMatch(_ a: [String], _ b: [String]) -> Bool {
-        guard a.count == b.count else { return false }
-        return zip(a, b).allSatisfy { normalizedToken($0) == normalizedToken($1) }
+    private static func comparableWord(_ w: String) -> String {
+        var t = w.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = t.last {
+            switch last {
+            case ".", ",", "!", "?", ";", ":", "\"", "'", "”", "“", "’":
+                t.removeLast()
+            default:
+                return normalizedToken(t)
+            }
+        }
+        return normalizedToken(t)
+    }
+
+    private static func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
+        let a = Array(lhs)
+        let b = Array(rhs)
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var previous = Array(0...b.count)
+        var current = Array(repeating: 0, count: b.count + 1)
+        for i in 1...a.count {
+            current[0] = i
+            for j in 1...b.count {
+                let substitutionCost = a[i - 1] == b[j - 1] ? 0 : 1
+                current[j] = min(
+                    previous[j] + 1,
+                    current[j - 1] + 1,
+                    previous[j - 1] + substitutionCost
+                )
+            }
+            swap(&previous, &current)
+        }
+        return previous[b.count]
+    }
+
+    private static func wordsRoughlyEqualPair(_ x: String, _ y: String) -> Bool {
+        let nx = comparableWord(x)
+        let ny = comparableWord(y)
+        if nx == ny { return true }
+        let maxLen = max(nx.count, ny.count)
+        if maxLen == 0 { return true }
+        if abs(nx.count - ny.count) > max(3, maxLen / 2) { return false }
+        let d = levenshteinDistance(nx, ny)
+        return d <= min(5, max(2, maxLen / 2 + 1))
+    }
+
+    /// True when aligned words mostly match (streaming rewrites one or two tokens in the overlap).
+    private static func suffixPrefixWordArraysRoughlyAlign(_ a: [String], _ b: [String]) -> Bool {
+        guard a.count == b.count, !a.isEmpty else { return false }
+        let k = a.count
+        var ok = 0
+        for i in 0..<k {
+            if wordsRoughlyEqualPair(a[i], b[i]) { ok += 1 }
+        }
+        let ratio = Double(ok) / Double(k)
+        if k < 8 { return ratio >= 0.84 }
+        return ratio >= 0.80
     }
 
     /// Largest `k` such that the last `k` words of `previous` equal the first `k` words of `next` (token-normalized).
@@ -30,7 +84,7 @@ enum LiveTranscriptOverlap {
         for k in stride(from: maxK, through: minK, by: -1) {
             let ps = Array(pw.suffix(k))
             let np = Array(nw.prefix(k))
-            if wordRunsMatch(ps, np) {
+            if suffixPrefixWordArraysRoughlyAlign(ps, np) {
                 return k
             }
         }
