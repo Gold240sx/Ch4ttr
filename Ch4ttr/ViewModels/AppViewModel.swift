@@ -65,6 +65,8 @@ final class AppViewModel: ObservableObject {
     private var liveUnstableTranscriptSuffix = ""
     private var isStoppingFromVoiceCommand = false
     private var cancellables: Set<AnyCancellable> = []
+    /// When set, `SystemOutputVolumeDucker` is lowering output volume for this dictation session.
+    private var activeSystemOutputDuckSessionID: UUID?
 
     private init() {
         // Persist dictionary edits safely without triggering SwiftUI update warnings.
@@ -308,6 +310,17 @@ final class AppViewModel: ObservableObject {
                 recorder.onAudioBuffer = nil
             }
             try recorder.start(preferredDeviceName: settings.microphone)
+
+            if settings.duckMacSystemOutputWhileRecording {
+                let duckID = UUID()
+                activeSystemOutputDuckSessionID = duckID
+                SystemOutputVolumeDucker.shared.beginDuckingIfNeeded(
+                    enabled: true,
+                    relativeLevel: settings.macSystemOutputDuckRelativeLevel,
+                    rampDuration: settings.macSystemOutputVolumeRampSeconds,
+                    sessionID: duckID
+                )
+            }
         } catch {
             let message = Self.describe(error: error)
             lastTranscriptionError = message
@@ -345,7 +358,15 @@ final class AppViewModel: ObservableObject {
         let tempWav = modelStore.appSupportDirectory.appendingPathComponent("temp_recording.wav")
 
         do {
-            try recorder.stopAndWriteWav(to: tempWav)
+            let stopRecordingResult = Result { try recorder.stopAndWriteWav(to: tempWav) }
+            if let duckID = activeSystemOutputDuckSessionID {
+                activeSystemOutputDuckSessionID = nil
+                SystemOutputVolumeDucker.shared.endDuckingIfNeeded(
+                    rampDuration: settings.macSystemOutputVolumeRampSeconds,
+                    sessionID: duckID
+                )
+            }
+            try stopRecordingResult.get()
             inputLevel = 0
             inputWaveform = Array(repeating: 0, count: inputWaveform.count)
 

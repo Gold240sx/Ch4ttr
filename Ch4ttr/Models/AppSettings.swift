@@ -19,6 +19,12 @@ struct AppSettings: Codable, Equatable, Sendable {
     var showMiniRecorderTranscript: Bool
     var showMiniRecorderStatusPill: Bool
     var showMiniRecorderWaveform: Bool
+    /// When true, smoothly lowers the default Mac **output** volume while the mic is recording (not a full mute).
+    var duckMacSystemOutputWhileRecording: Bool
+    /// Target level as a fraction of the output volume **before** dictation starts (e.g. `0.18` ≈ 18%).
+    var macSystemOutputDuckRelativeLevel: Double
+    /// Seconds for each fade when ducking and when restoring (smoothstep ramp).
+    var macSystemOutputVolumeRampSeconds: Double
 
     init(
         microphone: String,
@@ -36,7 +42,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         longHoldDurationSeconds: Double = 2,
         showMiniRecorderTranscript: Bool = false,
         showMiniRecorderStatusPill: Bool = true,
-        showMiniRecorderWaveform: Bool = true
+        showMiniRecorderWaveform: Bool = true,
+        duckMacSystemOutputWhileRecording: Bool = false,
+        macSystemOutputDuckRelativeLevel: Double = 0.18,
+        macSystemOutputVolumeRampSeconds: Double = 0.42
     ) {
         self.microphone = microphone
         self.engine = engine
@@ -54,6 +63,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.showMiniRecorderTranscript = showMiniRecorderTranscript
         self.showMiniRecorderStatusPill = showMiniRecorderStatusPill
         self.showMiniRecorderWaveform = showMiniRecorderWaveform
+        self.duckMacSystemOutputWhileRecording = duckMacSystemOutputWhileRecording
+        self.macSystemOutputDuckRelativeLevel = macSystemOutputDuckRelativeLevel
+        self.macSystemOutputVolumeRampSeconds = macSystemOutputVolumeRampSeconds
     }
 
     static let defaultValue = AppSettings(
@@ -75,7 +87,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         longHoldDurationSeconds: 2,
         showMiniRecorderTranscript: false,
         showMiniRecorderStatusPill: true,
-        showMiniRecorderWaveform: true
+        showMiniRecorderWaveform: true,
+        duckMacSystemOutputWhileRecording: false,
+        macSystemOutputDuckRelativeLevel: 0.18,
+        macSystemOutputVolumeRampSeconds: 0.42
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -95,6 +110,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         case showMiniRecorderTranscript
         case showMiniRecorderStatusPill
         case showMiniRecorderWaveform
+        case duckMacSystemOutputWhileRecording
+        case macSystemOutputDuckRelativeLevel
+        case macSystemOutputVolumeRampSeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -115,7 +133,10 @@ struct AppSettings: Codable, Equatable, Sendable {
             longHoldDurationSeconds: try container.decodeIfPresent(Double.self, forKey: .longHoldDurationSeconds) ?? 2,
             showMiniRecorderTranscript: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderTranscript) ?? false,
             showMiniRecorderStatusPill: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderStatusPill) ?? true,
-            showMiniRecorderWaveform: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderWaveform) ?? true
+            showMiniRecorderWaveform: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderWaveform) ?? true,
+            duckMacSystemOutputWhileRecording: try container.decodeIfPresent(Bool.self, forKey: .duckMacSystemOutputWhileRecording) ?? false,
+            macSystemOutputDuckRelativeLevel: try container.decodeIfPresent(Double.self, forKey: .macSystemOutputDuckRelativeLevel) ?? 0.18,
+            macSystemOutputVolumeRampSeconds: try container.decodeIfPresent(Double.self, forKey: .macSystemOutputVolumeRampSeconds) ?? 0.42
         )
     }
 }
