@@ -48,6 +48,8 @@ struct SettingsSidebarView: View {
                     .tag(SettingsSection.engine)
                 Label("Recording", systemImage: "keyboard.badge.ellipsis")
                     .tag(SettingsSection.recording)
+                Label("Voice commands", systemImage: "text.bubble")
+                    .tag(SettingsSection.voiceCommands)
                 Label("Permissions", systemImage: "hand.raised.fill")
                     .tag(SettingsSection.permissions)
                 Label("Dictionary", systemImage: "character.book.closed")

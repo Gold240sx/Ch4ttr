@@ -15,7 +15,7 @@ Think of it as a small, hackable alternative to “big” dictation stacks: Swif
 - **Actually pastes:** Uses the pasteboard + accessibility-aware text replacement so transcripts land where you are typing (requires **Accessibility** permission).
 - **Flexible triggers:** Global **hotkey** (toggle or push-to-talk) plus optional **long-hold modifier** (e.g. hold **Shift alone** for ~2 seconds).
 - **Quality-of-life cleanup:** Normalizes spacing, collapses **short repeated phrases** and **long consecutive duplicate clauses** (common when streaming recognition stutters), per-user **dictionary** replacements, and sentence capitalization (where applicable).
-- **Voice commands:** Spoken commands to restart / trim paragraph / stop recording (see `VoiceCommandService` in the codebase).
+- **Voice commands:** Say **Chatter** (case-insensitive) as a trigger, then a command—for example **Chatter restart**, **Chatter restart paragraph**, **Chatter start**, **Chatter end** / **Chatter stop**, **Chatter select all**, **Chatter select paragraph**, **Chatter select sentence**, and **Chatter paste** (see `VoiceCommandService`). Select paragraph/sentence use best-effort keyboard shortcuts and vary by app.
 - **Mini recorder:** Compact floating panel with level meter, optional live preview, and quick engine/mic toggles.
 - **Profiles:** Local per-user settings and dictionary (no account server in-app).
 
@@ -96,6 +96,8 @@ SpeechKit exposes **different** recognition paths for **live audio** (`SFSpeechA
 An earlier design ran that **URL pass at every stop** and replaced the whole live-inserted range with its result. In practice that often felt **regressive**: the text looked good while speaking, then **changed for the worse** when the session ended.
 
 **Current behavior:** If **live insertion** was active for the recording and the merged live buffer is **non-empty**, Ch4ttr **does not** run the WAV URL recognizer for that stop. It treats the live text as authoritative and only applies the usual **voice-command filter** and **`cleanupText`** polish (punctuation, dictionary, repeat collapse, etc.). If live insertion never worked or the live buffer is empty, Ch4ttr still falls back to **file-based** Apple Speech on the WAV so you get a transcript when streaming did not populate the field.
+
+While dictating, when the recognizer **rephrases** without a clean prefix extension, Ch4ttr detects **suffix/prefix word overlap** between the old and new hypothesis so a rewritten clause is not pasted twice (`LiveTranscriptOverlap`).
 
 ---
 

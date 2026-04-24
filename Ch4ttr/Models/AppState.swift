@@ -4,6 +4,7 @@ enum SettingsSection: Hashable {
     case general
     case engine
     case recording
+    case voiceCommands
     case permissions
     case dictionary
 }

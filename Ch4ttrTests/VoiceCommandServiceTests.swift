@@ -51,4 +51,31 @@ final class VoiceCommandServiceTests: XCTestCase {
         XCTAssertFalse(result.handledCommand)
         XCTAssertFalse(result.shouldStopRecording)
     }
+
+    func testChatterSelectAllSetsIntent() {
+        let result = VoiceCommandService().apply(
+            to: "keep this chatter select all and this"
+        )
+        XCTAssertEqual(result.text, "keep this and this")
+        XCTAssertEqual(result.editingIntent, .selectAll)
+        XCTAssertTrue(result.handledCommand)
+    }
+
+    func testChatterSelectParagraphSetsIntent() {
+        let result = VoiceCommandService().apply(to: "x chatter select paragraph y")
+        XCTAssertEqual(result.text, "x y")
+        XCTAssertEqual(result.editingIntent, .selectParagraph)
+    }
+
+    func testChatterSelectSentenceSetsIntent() {
+        let result = VoiceCommandService().apply(to: "x chatter select sentence y")
+        XCTAssertEqual(result.text, "x y")
+        XCTAssertEqual(result.editingIntent, .selectSentence)
+    }
+
+    func testChatterPasteSetsIntent() {
+        let result = VoiceCommandService().apply(to: "x chatter paste y")
+        XCTAssertEqual(result.text, "x y")
+        XCTAssertEqual(result.editingIntent, .paste)
+    }
 }

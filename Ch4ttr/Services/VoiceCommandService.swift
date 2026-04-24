@@ -1,10 +1,20 @@
 import Foundation
 
+/// System editing actions triggered by spoken commands (prefix with **Chatter** — case-insensitive, see `VoiceCommandService`).
+enum VoiceEditingIntent: Equatable, Sendable {
+    case selectAll
+    case selectParagraph
+    case selectSentence
+    case paste
+}
+
 final class VoiceCommandService {
     struct CommandResult: Equatable {
         var text: String
         var shouldStopRecording: Bool
         var handledCommand: Bool
+        /// When set, the app should simulate this shortcut in the focused app (requires Accessibility).
+        var editingIntent: VoiceEditingIntent?
     }
 
     private enum CommandKind {
@@ -12,6 +22,10 @@ final class VoiceCommandService {
         case restartParagraph
         case start
         case end
+        case selectAll
+        case selectParagraph
+        case selectSentence
+        case paste
     }
 
     private struct ParsedCommand {
@@ -44,12 +58,13 @@ final class VoiceCommandService {
     func apply(to text: String) -> CommandResult {
         let tokens = tokenize(text)
         guard !tokens.isEmpty else {
-            return CommandResult(text: "", shouldStopRecording: false, handledCommand: false)
+            return CommandResult(text: "", shouldStopRecording: false, handledCommand: false, editingIntent: nil)
         }
 
         var output: [Token] = []
         var shouldStopRecording = false
         var handledCommand = false
+        var editingIntent: VoiceEditingIntent?
         var index = 0
 
         while index < tokens.count {
@@ -70,6 +85,18 @@ final class VoiceCommandService {
                 case .end:
                     shouldStopRecording = true
                     shouldEndLoop = true
+
+                case .selectAll:
+                    editingIntent = .selectAll
+
+                case .selectParagraph:
+                    editingIntent = .selectParagraph
+
+                case .selectSentence:
+                    editingIntent = .selectSentence
+
+                case .paste:
+                    editingIntent = .paste
                 }
 
                 index = command.endIndex
@@ -86,7 +113,8 @@ final class VoiceCommandService {
         return CommandResult(
             text: render(output),
             shouldStopRecording: shouldStopRecording,
-            handledCommand: handledCommand
+            handledCommand: handledCommand,
+            editingIntent: editingIntent
         )
     }
 
@@ -107,6 +135,34 @@ final class VoiceCommandService {
         }
 
         switch commandWord {
+        case "select":
+            guard let targetIndex = nextWordIndex(after: commandIndex, in: tokens),
+                  let target = normalizedWord(at: targetIndex, in: tokens)
+            else {
+                return nil
+            }
+            let kind: CommandKind
+            switch target {
+            case "all":
+                kind = .selectAll
+            case "paragraph":
+                kind = .selectParagraph
+            case "sentence":
+                kind = .selectSentence
+            default:
+                return nil
+            }
+            return ParsedCommand(
+                kind: kind,
+                endIndex: firstIndexAfterCommand(lastWordIndex: targetIndex, in: tokens)
+            )
+
+        case "paste":
+            return ParsedCommand(
+                kind: .paste,
+                endIndex: firstIndexAfterCommand(lastWordIndex: commandIndex, in: tokens)
+            )
+
         case "restart":
             if let paragraphIndex = paragraphCommandIndex(after: commandIndex, in: tokens) {
                 return ParsedCommand(
@@ -231,6 +287,7 @@ final class VoiceCommandService {
         return nil
     }
 
+    /// Trigger word for commands (matches “Chatter” / “chatter” after normalization).
     private func isTrigger(_ token: Token) -> Bool {
         normalizedWord(token.wordValue ?? "") == "chatter"
     }

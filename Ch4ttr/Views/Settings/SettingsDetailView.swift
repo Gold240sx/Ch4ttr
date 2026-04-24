@@ -14,6 +14,8 @@ struct SettingsDetailView: View {
                     EngineSectionView()
                 case .recording:
                     RecordingSectionView()
+                case .voiceCommands:
+                    VoiceCommandsSectionView()
                 case .permissions:
                     PermissionsSectionView()
                 case .dictionary:

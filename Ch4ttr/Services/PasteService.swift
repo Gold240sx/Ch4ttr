@@ -11,7 +11,56 @@ final class PasteService {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
-        return simulateCmdVViaCGEvent()
+        return simulatePasteFromClipboard()
+    }
+
+    /// Command–V (uses whatever is already on the general pasteboard).
+    @MainActor
+    func simulatePasteFromClipboard() -> Result<Void, PasteError> {
+        postKeyDownUp(virtualKey: 0x09, flags: .maskCommand) // V
+    }
+
+    /// Command–A (select all in the focused text field in most apps).
+    @MainActor
+    func simulateSelectAll() -> Result<Void, PasteError> {
+        postKeyDownUp(virtualKey: 0x00, flags: .maskCommand) // A
+    }
+
+    /// Option–Up then Option–Shift–Down: best-effort “select paragraph” in many Cocoa-style fields.
+    @MainActor
+    func simulateSelectParagraphBestEffort() async -> Result<Void, PasteError> {
+        let r1 = postKeyDownUp(virtualKey: 0x7E, flags: .maskAlternate) // Up + Option
+        guard case .success = r1 else { return r1 }
+        try? await Task.sleep(for: .milliseconds(75))
+        return postKeyDownUp(virtualKey: 0x7D, flags: [.maskAlternate, .maskShift]) // Down + Option + Shift
+    }
+
+    /// Option–Shift–Left then Option–Shift–Right: best-effort “select sentence” around the caret.
+    @MainActor
+    func simulateSelectSentenceBestEffort() async -> Result<Void, PasteError> {
+        let r1 = postKeyDownUp(virtualKey: 0x7B, flags: [.maskAlternate, .maskShift]) // Left
+        guard case .success = r1 else { return r1 }
+        try? await Task.sleep(for: .milliseconds(75))
+        return postKeyDownUp(virtualKey: 0x7C, flags: [.maskAlternate, .maskShift]) // Right
+    }
+
+    @MainActor
+    private func postKeyDownUp(virtualKey: CGKeyCode, flags: CGEventFlags) -> Result<Void, PasteError> {
+        guard AXIsProcessTrusted() else {
+            return .failure(.accessibilityDenied)
+        }
+        let src = CGEventSource(stateID: .combinedSessionState)
+        guard
+            let down = CGEvent(keyboardEventSource: src, virtualKey: virtualKey, keyDown: true),
+            let up = CGEvent(keyboardEventSource: src, virtualKey: virtualKey, keyDown: false)
+        else {
+            return .failure(.eventCreationFailed)
+        }
+        down.flags = flags
+        up.flags = flags
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return .success(())
     }
 
     @MainActor
@@ -39,22 +88,7 @@ final class PasteService {
     }
 
     private func simulateCmdVViaCGEvent() -> Result<Void, PasteError> {
-        guard AXIsProcessTrusted() else {
-            return .failure(.accessibilityDenied)
-        }
-        let src = CGEventSource(stateID: .combinedSessionState)
-        // Virtual key 0x09 = V
-        guard
-            let down = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true),
-            let up   = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false)
-        else {
-            return .failure(.eventCreationFailed)
-        }
-        down.flags = [.maskCommand]
-        up.flags   = [.maskCommand]
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
-        return .success(())
+        simulatePasteFromClipboard()
     }
 
     private func pasteReplacingSelection(_ text: String) -> Result<Void, PasteError> {

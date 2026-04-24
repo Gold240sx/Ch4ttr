@@ -400,7 +400,9 @@ final class AppViewModel: ObservableObject {
 
             try? FileManager.default.removeItem(at: tempWav)
 
-            let commandFilteredText = voiceCommands.apply(to: rawText).text
+            let voiceCommandResult = voiceCommands.apply(to: rawText)
+            performVoiceEditingIntents(voiceCommandResult)
+            let commandFilteredText = voiceCommandResult.text
             let cleaned = cleanup.cleanupText(commandFilteredText, language: settings.language, dictionary: dictionary)
             lastTranscript = cleaned
             livePreviewText = ""
@@ -431,6 +433,7 @@ final class AppViewModel: ObservableObject {
         guard liveSpeechRunning, settings.engine == .appleSpeech else { return }
 
         let commandResult = voiceCommands.apply(to: text)
+        performVoiceEditingIntents(commandResult)
         let cleaned = cleanup.cleanupStreamingPartial(
             commandResult.text,
             language: settings.language,
@@ -438,12 +441,12 @@ final class AppViewModel: ObservableObject {
             isUtteranceFinal: isFinal
         )
         let allowsEmptyUpdate = commandResult.handledCommand
-        if cleaned.isEmpty, !allowsEmptyUpdate {
+        if cleaned.isEmpty, !allowsEmptyUpdate, commandResult.editingIntent == nil {
             requestStopFromVoiceCommandIfNeeded(commandResult)
             return
         }
 
-        if cleaned.isEmpty, allowsEmptyUpdate {
+        if cleaned.isEmpty, allowsEmptyUpdate, commandResult.editingIntent == nil {
             liveStableTranscriptPrefix = ""
             liveUnstableTranscriptSuffix = ""
             livePreviewText = ""
@@ -468,8 +471,9 @@ final class AppViewModel: ObservableObject {
                 if isRefinement {
                     liveUnstableTranscriptSuffix = cleaned
                 } else {
-                    liveStableTranscriptPrefix = Self.joinLiveTranscriptSegments(liveStableTranscriptPrefix, previous)
-                    liveUnstableTranscriptSuffix = cleaned
+                    let split = LiveTranscriptOverlap.splitNonRefinementUpdate(previous: previous, next: cleaned)
+                    liveStableTranscriptPrefix = Self.joinLiveTranscriptSegments(liveStableTranscriptPrefix, split.head)
+                    liveUnstableTranscriptSuffix = split.tail
                 }
             }
         }
@@ -522,6 +526,30 @@ final class AppViewModel: ObservableObject {
         if let c1 = t1.last, c1.isWhitespace { return t1 + t2 }
         if let c2 = t2.first, c2.isWhitespace { return t1 + t2 }
         return t1 + " " + t2
+    }
+
+    private func performVoiceEditingIntents(_ result: VoiceCommandService.CommandResult) {
+        guard let intent = result.editingIntent else { return }
+        Task { @MainActor in
+            await self.runVoiceEditingIntent(intent)
+        }
+    }
+
+    private func runVoiceEditingIntent(_ intent: VoiceEditingIntent) async {
+        let outcome: Result<Void, PasteError>
+        switch intent {
+        case .selectAll:
+            outcome = paste.simulateSelectAll()
+        case .paste:
+            outcome = paste.simulatePasteFromClipboard()
+        case .selectParagraph:
+            outcome = await paste.simulateSelectParagraphBestEffort()
+        case .selectSentence:
+            outcome = await paste.simulateSelectSentenceBestEffort()
+        }
+        if case .failure(let err) = outcome {
+            lastPasteError = err.description
+        }
     }
 
     private func requestStopFromVoiceCommandIfNeeded(_ commandResult: VoiceCommandService.CommandResult) {
