@@ -11,6 +11,11 @@ struct AppSettings: Codable, Equatable, Sendable {
     var language: AppLanguage
     var recordingMode: RecordingMode
     var hotkey: Hotkey
+    /// Hold this modifier alone for `longHoldDurationSeconds` to act like the hotkey (toggle once, or push-to-talk press / release).
+    var longHoldTriggerEnabled: Bool
+    var longHoldModifier: LongHoldModifierKey
+    /// Seconds the modifier must stay down before firing (clamped when applied).
+    var longHoldDurationSeconds: Double
     var showMiniRecorderTranscript: Bool
     var showMiniRecorderStatusPill: Bool
     var showMiniRecorderWaveform: Bool
@@ -26,6 +31,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         language: AppLanguage,
         recordingMode: RecordingMode,
         hotkey: Hotkey,
+        longHoldTriggerEnabled: Bool = false,
+        longHoldModifier: LongHoldModifierKey = .shift,
+        longHoldDurationSeconds: Double = 2,
         showMiniRecorderTranscript: Bool = false,
         showMiniRecorderStatusPill: Bool = true,
         showMiniRecorderWaveform: Bool = true
@@ -40,6 +48,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.language = language
         self.recordingMode = recordingMode
         self.hotkey = hotkey
+        self.longHoldTriggerEnabled = longHoldTriggerEnabled
+        self.longHoldModifier = longHoldModifier
+        self.longHoldDurationSeconds = longHoldDurationSeconds
         self.showMiniRecorderTranscript = showMiniRecorderTranscript
         self.showMiniRecorderStatusPill = showMiniRecorderStatusPill
         self.showMiniRecorderWaveform = showMiniRecorderWaveform
@@ -59,6 +70,9 @@ struct AppSettings: Codable, Equatable, Sendable {
             keyCode: 49, // space
             modifiers: [.command, .shift]
         ),
+        longHoldTriggerEnabled: false,
+        longHoldModifier: .shift,
+        longHoldDurationSeconds: 2,
         showMiniRecorderTranscript: false,
         showMiniRecorderStatusPill: true,
         showMiniRecorderWaveform: true
@@ -75,6 +89,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         case language
         case recordingMode
         case hotkey
+        case longHoldTriggerEnabled
+        case longHoldModifier
+        case longHoldDurationSeconds
         case showMiniRecorderTranscript
         case showMiniRecorderStatusPill
         case showMiniRecorderWaveform
@@ -93,6 +110,9 @@ struct AppSettings: Codable, Equatable, Sendable {
             language: try container.decode(AppLanguage.self, forKey: .language),
             recordingMode: try container.decode(RecordingMode.self, forKey: .recordingMode),
             hotkey: try container.decode(Hotkey.self, forKey: .hotkey),
+            longHoldTriggerEnabled: try container.decodeIfPresent(Bool.self, forKey: .longHoldTriggerEnabled) ?? false,
+            longHoldModifier: try container.decodeIfPresent(LongHoldModifierKey.self, forKey: .longHoldModifier) ?? .shift,
+            longHoldDurationSeconds: try container.decodeIfPresent(Double.self, forKey: .longHoldDurationSeconds) ?? 2,
             showMiniRecorderTranscript: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderTranscript) ?? false,
             showMiniRecorderStatusPill: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderStatusPill) ?? true,
             showMiniRecorderWaveform: try container.decodeIfPresent(Bool.self, forKey: .showMiniRecorderWaveform) ?? true
@@ -117,6 +137,23 @@ enum WhisperModel: String, Codable, Sendable {
 enum RecordingMode: String, Codable, Sendable {
     case toggle
     case pushToTalk
+}
+
+/// Modifier held alone (no other modifiers) for `longHoldDurationSeconds` to fire the recording trigger.
+enum LongHoldModifierKey: String, Codable, Sendable, CaseIterable {
+    case shift
+    case option
+    case control
+    case command
+
+    var displayName: String {
+        switch self {
+        case .shift: return "Shift"
+        case .option: return "Option"
+        case .control: return "Control"
+        case .command: return "Command"
+        }
+    }
 }
 
 struct Hotkey: Codable, Equatable, Sendable {

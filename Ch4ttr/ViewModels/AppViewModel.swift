@@ -45,6 +45,7 @@ final class AppViewModel: ObservableObject {
     private let downloader = ModelDownloader()
     private let overlay = OverlayController()
     private let hotkey = GlobalHotkeyManager()
+    private let longHoldMonitor = LongHoldModifierMonitor()
     private let recorder = AudioRecorder()
     private let groq = GroqTranscriber()
     private let local = LocalWhisperTranscriber()
@@ -101,6 +102,7 @@ final class AppViewModel: ObservableObject {
             }
         }
         hotkey.register(hotkey: settings.hotkey)
+        configureLongHoldMonitor()
     }
 
     // MARK: - Profiles
@@ -114,7 +116,47 @@ final class AppViewModel: ObservableObject {
         writeBackPublishedStateToSelectedUser()
         persistProfiles()
         hotkey.register(hotkey: settings.hotkey)
+        configureLongHoldMonitor()
         refreshModelDownloadedFlag()
+    }
+
+    private func configureLongHoldMonitor() {
+        longHoldMonitor.configure(
+            state: { [weak self] in
+                guard let self else { return (false, .shift, 2) }
+                let d = self.settings.longHoldDurationSeconds
+                let clamped = min(10, max(0.5, d))
+                return (
+                    self.settings.longHoldTriggerEnabled,
+                    self.settings.longHoldModifier,
+                    clamped
+                )
+            },
+            onThreshold: { [weak self] in
+                Task { @MainActor in
+                    await self?.handleLongHoldThreshold()
+                }
+            },
+            onReleaseAfterThreshold: { [weak self] in
+                Task { @MainActor in
+                    await self?.handleLongHoldReleaseAfterThreshold()
+                }
+            }
+        )
+    }
+
+    private func handleLongHoldThreshold() async {
+        switch settings.recordingMode {
+        case .toggle:
+            await toggleRecording(mode: .toggle)
+        case .pushToTalk:
+            await toggleRecording(mode: .pushToTalkPressed)
+        }
+    }
+
+    private func handleLongHoldReleaseAfterThreshold() async {
+        guard settings.recordingMode == .pushToTalk else { return }
+        await toggleRecording(mode: .pushToTalkReleased)
     }
 
     /// Use from SwiftUI `onChange` and custom `Binding` setters. Running `persistSettings()` in the
@@ -325,7 +367,27 @@ final class AppViewModel: ObservableObject {
                         NSLocalizedRecoverySuggestionErrorKey: "Open System Settings → Privacy & Security → Speech Recognition and enable Ch4ttr."
                     ])
                 }
-                rawText = try await AppleSpeechTranscriber().transcribe(audioURL: tempWav, language: settings.language)
+                // A second `SFSpeechRecognizer` pass on the WAV often disagrees with the streaming session and replaces
+                // good live text with a worse transcript. When live insertion ran, keep what the user already saw.
+                if shouldReplaceLiveInsertion {
+                    let joined = Self.joinLiveTranscriptSegments(
+                        liveStableTranscriptPrefix,
+                        liveUnstableTranscriptSuffix
+                    )
+                    let polished = cleanup.postProcessJoinedLiveDisplay(
+                        joined,
+                        language: settings.language,
+                        dictionary: dictionary
+                    )
+                    let trimmed = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        rawText = polished
+                    } else {
+                        rawText = try await AppleSpeechTranscriber().transcribe(audioURL: tempWav, language: settings.language)
+                    }
+                } else {
+                    rawText = try await AppleSpeechTranscriber().transcribe(audioURL: tempWav, language: settings.language)
+                }
             case .openAI:
                 rawText = try await OpenAITranscriber().transcribe(apiKey: settings.openAIApiKey, audioURL: tempWav, language: settings.language)
             case .groq:

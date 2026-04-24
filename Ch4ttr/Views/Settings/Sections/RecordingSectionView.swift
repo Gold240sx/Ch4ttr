@@ -66,6 +66,50 @@ struct RecordingSectionView: View {
                         isRecordingHotkey = false
                     }
                     .frame(width: 0, height: 0)
+
+                    Divider().opacity(0.25)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Long-hold modifier trigger", isOn: $model.settings.longHoldTriggerEnabled)
+                            .onChange(of: model.settings.longHoldTriggerEnabled) { _, _ in
+                                model.queuePersistSettings()
+                            }
+                        Text("Hold only the chosen modifier (no other ⌘ ⌥ ⌃ ⇧ keys at the same time) for the duration below. Toggle: one action after the hold finishes. Push to talk: recording starts when the hold completes and stops when you release the modifier.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if model.settings.longHoldTriggerEnabled {
+                            Picker("Modifier", selection: $model.settings.longHoldModifier) {
+                                ForEach(LongHoldModifierKey.allCases, id: \.self) { key in
+                                    Text(key.displayName).tag(key)
+                                }
+                            }
+                            .onChange(of: model.settings.longHoldModifier) { _, _ in
+                                model.queuePersistSettings()
+                            }
+
+                            HStack {
+                                Text("Hold duration")
+                                    .font(.subheadline)
+                                Spacer(minLength: 0)
+                                Text("\(model.settings.longHoldDurationSeconds, specifier: "%.1f") s")
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: { model.settings.longHoldDurationSeconds },
+                                    set: { model.settings.longHoldDurationSeconds = $0 }
+                                ),
+                                in: 0.5...10,
+                                step: 0.1
+                            )
+                            .onChange(of: model.settings.longHoldDurationSeconds) { _, _ in
+                                model.queuePersistSettings()
+                            }
+                        }
+                    }
                 }
             }
 
